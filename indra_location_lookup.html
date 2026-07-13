@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>INDRA — Location Risk Lookup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/3.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+  :root{
+    --bg: #12100D;
+    --bg-panel: #1B1712;
+    --bg-panel-raised: #221D16;
+    --hairline: #3A3226;
+    --amber: #E8A33D;
+    --amber-dim: #8C6A2E;
+    --teal: #4C9C89;
+    --red: #C1443C;
+    --paper: #EDE6D6;
+    --paper-dim: #B8AE99;
+    --paper-faint: #766D5C;
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(232,163,61,0.06), transparent 45%),
+      radial-gradient(circle at 85% 100%, rgba(76,156,137,0.05), transparent 40%);
+    color: var(--paper);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    padding: 28px 20px 60px;
+  }
+  .console{ max-width: 1000px; margin: 0 auto; }
+
+  .hero{
+    border: 1px solid var(--hairline);
+    background: linear-gradient(180deg, var(--bg-panel-raised), var(--bg-panel));
+    border-radius: 6px;
+    padding: 28px 30px;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image: repeating-linear-gradient(90deg, rgba(237,230,214,0.025) 0 1px, transparent 1px 38px);
+    pointer-events:none;
+  }
+  .eyebrow{
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em;
+    color: var(--amber); text-transform: uppercase; margin: 0 0 10px; position:relative;
+  }
+  .hero h1{ font-family: var(--font-display); font-weight: 700; font-size: 34px; letter-spacing: -0.01em; margin: 0 0 12px; position:relative; }
+  .hero p{ font-size: 14px; color: var(--paper-dim); max-width: 62ch; line-height: 1.55; margin: 0; position:relative; }
+
+  .panel{
+    border: 1px solid var(--hairline);
+    background: var(--bg-panel);
+    border-radius: 6px;
+    padding: 24px 26px;
+    margin-top: 20px;
+  }
+  .panel-title{ font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--teal); margin: 0 0 4px; }
+  .panel-sub{ font-size: 13px; color: var(--paper-faint); margin: 0 0 16px; }
+
+  .dropzone{
+    border: 1.5px dashed var(--hairline); border-radius: 6px; padding: 30px 20px;
+    text-align: center; cursor: pointer; transition: border-color .15s ease, background .15s ease;
+  }
+  .dropzone:hover, .dropzone.drag{ border-color: var(--amber); background: rgba(232,163,61,0.05); }
+  .dropzone-title{ font-family: var(--font-display); font-weight: 600; font-size: 16px; margin-bottom: 6px; }
+  .dropzone-sub{ font-size: 12.5px; color: var(--paper-faint); font-family: var(--font-mono); }
+  #fileInput{ display:none; }
+  .file-tag{
+    display:none; margin-top:12px; font-family: var(--font-mono); font-size:12px; color: var(--teal);
+  }
+
+  .error-msg{ margin-top: 14px; font-family: var(--font-mono); font-size: 12.5px; color: var(--red); display:none; }
+
+  .field-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .field{ display:flex; flex-direction:column; gap:6px; }
+  .field label{ font-family: var(--font-mono); font-size: 10.5px; letter-spacing:0.08em; text-transform:uppercase; color: var(--paper-faint); }
+  select, input[type=number], input[type=text]{
+    background: var(--bg-panel-raised); border: 1px solid var(--hairline); color: var(--paper);
+    font-family: var(--font-mono); font-size: 13px; padding: 9px 10px; border-radius: 4px;
+  }
+  select:focus, input:focus{ outline:none; border-color: var(--amber); }
+
+  .query-grid{ display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 16px; align-items:end; }
+  .radius-row{ display:flex; align-items:center; gap:10px; }
+  .radius-row input[type=range]{ flex:1; accent-color: var(--amber); }
+  .radius-value{ font-family: var(--font-mono); font-size: 12px; color: var(--amber); min-width: 54px; text-align:right; }
+
+  .btn{
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase;
+    background: var(--amber); color: #12100D; border: 1px solid var(--amber); padding: 10px 18px;
+    border-radius: 4px; cursor: pointer; font-weight: 600; height: fit-content;
+  }
+  .btn:hover{ background: #f0b458; }
+  .btn.secondary{
+    background: var(--bg-panel-raised); color: var(--paper); border: 1px solid var(--hairline); font-weight: 500;
+  }
+  .btn.secondary:hover{ border-color: var(--amber); color: var(--amber); }
+
+  .presets{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .preset-chip{
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--paper-dim); border: 1px solid var(--hairline);
+    padding: 4px 10px; border-radius: 20px; background: var(--bg-panel-raised); cursor:pointer;
+  }
+  .preset-chip:hover{ border-color: var(--teal); color: var(--teal); }
+
+  .stats-strip{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 20px; }
+  .stat-card{ border: 1px solid var(--hairline); background: var(--bg-panel); border-radius: 6px; padding: 16px; }
+  .stat-label{ font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--paper-faint); margin-bottom: 8px; }
+  .stat-value{ font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+
+  table{ width:100%; border-collapse: collapse; font-size: 12.5px; }
+  thead th{
+    text-align:left; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--paper-faint); border-bottom: 1px solid var(--hairline); padding: 8px 10px; white-space: nowrap;
+  }
+  tbody td{ padding: 7px 10px; border-bottom: 1px solid rgba(58,50,38,0.5); font-family: var(--font-mono); color: var(--paper-dim); white-space: nowrap; }
+  tbody tr:hover{ background: rgba(232,163,61,0.04); }
+  .risk-pill{ display:inline-block; padding: 2px 8px; border-radius: 3px; font-weight: 600; font-size: 11.5px; }
+  .table-scroll{ overflow-x:auto; max-height: 420px; overflow-y:auto; }
+  .table-controls{ display:flex; justify-content: flex-end; margin-bottom: 12px; }
+
+  footer{ margin-top: 30px; text-align:center; font-family: var(--font-mono); font-size: 10.5px; color: var(--paper-faint); letter-spacing: 0.05em; }
+
+  @media (max-width: 760px){
+    .field-grid{ grid-template-columns: 1fr; }
+    .query-grid{ grid-template-columns: 1fr; }
+    .stats-strip{ grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="console">
+
+  <div class="hero">
+    <p class="eyebrow">Operations Console // PS2 — Location Lookup</p>
+    <h1>INDRA — Location Risk Lookup</h1>
+    <p>Load a GDELT export, drop in coordinates for a corridor, port, or facility, and get every nearby event's Date and Global Risk score — scored with the same engine as the main console.</p>
+  </div>
+
+  <div class="panel">
+    <p class="panel-title">01 // Load Feed</p>
+    <p class="panel-sub">Needs GoldsteinScale, AvgTone, NumMentions, NumSources, NumArticles, QuadClass, EventRootCode — plus a date column and a latitude/longitude column (mapped below after upload).</p>
+    <div class="dropzone" id="dropzone">
+      <div class="dropzone-title">Drop file here, or click to browse</div>
+      <div class="dropzone-sub">.csv or .xlsx — processed entirely in this browser tab</div>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+    <div class="file-tag" id="fileTag"></div>
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+
+  <div class="panel" id="mappingPanel" style="display:none;">
+    <p class="panel-title">02 // Map Columns</p>
+    <p class="panel-sub">Best-guess mapping shown — correct it if needed.</p>
+    <div class="field-grid">
+      <div class="field"><label>Date column</label><select id="dateCol"></select></div>
+      <div class="field"><label>Latitude column</label><select id="latCol"></select></div>
+      <div class="field"><label>Longitude column</label><select id="lonCol"></select></div>
+    </div>
+  </div>
+
+  <div class="panel" id="queryPanel" style="display:none;">
+    <p class="panel-title">03 // Query a Location</p>
+    <p class="panel-sub">Enter coordinates and a search radius. Try a preset, or type your own.</p>
+    <div class="query-grid">
+      <div class="field"><label>Latitude</label><input type="number" step="any" id="qLat" placeholder="22.3358"></div>
+      <div class="field"><label>Longitude</label><input type="number" step="any" id="qLon" placeholder="69.8645"></div>
+      <div class="field">
+        <label>Radius — <span class="radius-value" id="radiusValue">250 km</span></label>
+        <div class="radius-row"><input type="range" id="radiusSlider" min="10" max="1000" step="10" value="250"></div>
+      </div>
+      <button class="btn" id="searchBtn">Search</button>
+    </div>
+    <div class="presets" id="presets"></div>
+  </div>
+
+  <div id="results" style="display:none;">
+    <div class="stats-strip">
+      <div class="stat-card"><div class="stat-label">Events Found</div><div class="stat-value" id="statCount">—</div></div>
+      <div class="stat-card"><div class="stat-label">Avg Global Risk</div><div class="stat-value" id="statAvg">—</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Risk</div><div class="stat-value" id="statPeak">—</div></div>
+      <div class="stat-card"><div class="stat-label">Peak Date</div><div class="stat-value" id="statPeakDate">—</div></div>
+    </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <p class="panel-title">04 // Global Risk Over Time</p>
+      <p class="panel-sub" id="chartSub">—</p>
+      <canvas id="timeChart" height="90"></canvas>
+    </div>
+
+    <div class="panel" style="margin-top:20px;">
+      <p class="panel-title">05 // Matched Events</p>
+      <div class="table-controls">
+        <button class="btn secondary" id="exportBtn">Export CSV</button>
+      </div>
+      <div class="table-scroll">
+        <table id="resultTable">
+          <thead><tr><th>Date</th><th>Global Risk</th><th>Distance (km)</th><th>EventRootCode</th><th>QuadClass</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <footer>INDRA — corridor-level risk scoring for PS2 · runs entirely client-side</footer>
+</div>
+
+<script>
+const REQUIRED_COLS = ['GoldsteinScale','AvgTone','NumMentions','NumSources','NumArticles','QuadClass','EventRootCode'];
+const SEVERITY_MAP = {1:5,2:10,3:15,4:20,5:10,6:15,7:20,8:15,9:25,10:40,11:50,12:55,13:70,14:75,15:80,16:85,17:90,18:95,19:100,20:100};
+const SANCTION_CODES = new Set([10,12,13,16,17]);
+
+const DATE_GUESSES = ['SQLDATE','DATEADDED','Date','date','EventDate','EVENT_DATE'];
+const LAT_GUESSES = ['ActionGeo_Lat','Actor1Geo_Lat','Actor2Geo_Lat','Lat','lat','Latitude','latitude'];
+const LON_GUESSES = ['ActionGeo_Long','ActionGeo_Lon','Actor1Geo_Long','Actor2Geo_Long','Long','lon','lng','Longitude','longitude'];
+
+const PRESETS = [
+  { name: 'Jamnagar Refinery', lat: 22.3358, lon: 69.8645 },
+  { name: 'Mumbai High (offshore)', lat: 19.5000, lon: 71.5000 },
+  { name: 'Kandla Port', lat: 23.0333, lon: 70.2167 },
+  { name: 'Paradip Port', lat: 20.3167, lon: 86.6167 },
+  { name: 'Vizag Port', lat: 17.6868, lon: 83.2185 },
+  { name: 'Strait of Hormuz', lat: 26.5667, lon: 56.2500 }
+];
+
+let scoredRows = [];
+let mappedCols = { date: null, lat: null, lon: null };
+let timeChartInstance = null;
+let lastMatched = [];
+
+function minMaxNorm(arr){
+  const min = Math.min(...arr), max = Math.max(...arr);
+  const range = (max - min) || 1;
+  return arr.map(v => ((v - min) / range) * 100);
+}
+function quadMap(v){ return v === 4 ? 100 : v === 3 ? 50 : 0; }
+
+function computeRisk(rows){
+  const goldsteinScale = rows.map(r => Number(r.GoldsteinScale) || 0);
+  const avgTone = rows.map(r => Number(r.AvgTone) || 0);
+  const numMentions = rows.map(r => Number(r.NumMentions) || 0);
+  const numSources = rows.map(r => Number(r.NumSources) || 0);
+  const numArticles = rows.map(r => Number(r.NumArticles) || 0);
+  const quadClass = rows.map(r => Number(r.QuadClass));
+  const eventRootCode = rows.map(r => Number(r.EventRootCode));
+
+  const goldStienRisk = minMaxNorm(goldsteinScale.map(v => Math.max(0, -v)));
+  const toneRisk = minMaxNorm(avgTone.map(v => Math.max(0, -v)));
+  const importance = minMaxNorm(numMentions.map((v,i) => 0.5*v + 0.3*numSources[i] + 0.2*numArticles[i]));
+
+  const conflict = quadClass.map(quadMap);
+  const conflictScore = conflict.map((c,i) => 0.4*c + 0.3*goldStienRisk[i] + 0.2*toneRisk[i] + 0.1*importance[i]);
+  const mediaSentimentRisk = toneRisk;
+  const militaryActivity = quadClass.map(quadMap);
+
+  const rootCodeSeverity = eventRootCode.map(c => SEVERITY_MAP[c] !== undefined ? SEVERITY_MAP[c] : 0);
+  const numMentionsNorm = minMaxNorm(numMentions);
+
+  const severityScore = rootCodeSeverity.map((s,i) => 0.4*s + 0.3*goldStienRisk[i] + 0.2*toneRisk[i] + 0.1*numMentionsNorm[i]);
+  const adjustedSeverityScore = severityScore.map((s,i) => s * (1 + toneRisk[i]/10));
+
+  const supplyChainScore = adjustedSeverityScore.map((s,i) => 0.35*s + 0.25*goldStienRisk[i] + 0.2*mediaSentimentRisk[i] + 0.1*numSources[i] + 0.10*toneRisk[i]);
+  const politicalScore = adjustedSeverityScore.map((s,i) => 0.40*s + 0.25*toneRisk[i] + 0.20*goldStienRisk[i] + 0.15*numMentionsNorm[i]);
+  const sanctionScore = eventRootCode.map((c,i) => SANCTION_CODES.has(c) ? adjustedSeverityScore[i] : 0);
+
+  const globalRiskRaw = conflictScore.map((c,i) =>
+    0.3*c + 0.2*goldStienRisk[i] + 0.15*mediaSentimentRisk[i] + 0.10*militaryActivity[i] + 0.10*supplyChainScore[i] + 0.05*politicalScore[i] + 0.10*sanctionScore[i]
+  );
+  const globalRisk = minMaxNorm(globalRiskRaw);
+
+  return rows.map((r,i) => ({ ...r, 'Global Risk': globalRisk[i] }));
+}
+
+function riskTier(v){
+  if (v >= 75) return {label:'CRITICAL', color:'#C1443C'};
+  if (v >= 60) return {label:'ELEVATED', color:'#E8A33D'};
+  if (v >= 40) return {label:'MODERATE', color:'#8C6A2E'};
+  return {label:'LOW', color:'#4C9C89'};
+}
+function fmt(v){ return typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(1)) : v; }
+
+function parseDate(raw){
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (raw instanceof Date) return raw;
+  if (typeof raw === 'number'){
+    const s = String(Math.trunc(raw));
+    if (s.length === 8) return new Date(Number(s.slice(0,4)), Number(s.slice(4,6))-1, Number(s.slice(6,8)));
+    if (s.length === 14) return new Date(Number(s.slice(0,4)), Number(s.slice(4,6))-1, Number(s.slice(6,8)), Number(s.slice(8,10)), Number(s.slice(10,12)));
+    if (raw > 20000 && raw < 60000){ // excel serial date
+      const excelEpoch = new Date(Date.UTC(1899,11,30));
+      return new Date(excelEpoch.getTime() + raw*86400000);
+    }
+  }
+  if (typeof raw === 'string'){
+    if (/^\d{8}$/.test(raw)) return new Date(Number(raw.slice(0,4)), Number(raw.slice(4,6))-1, Number(raw.slice(6,8)));
+    const d = new Date(raw);
+    if (!isNaN(d)) return d;
+  }
+  return null;
+}
+
+function haversine(lat1, lon1, lat2, lon2){
+  const R = 6371;
+  const dLat = (lat2-lat1) * Math.PI/180;
+  const dLon = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function guessCol(cols, guesses){
+  for (const g of guesses) if (cols.includes(g)) return g;
+  const lowerCols = cols.map(c => c.toLowerCase());
+  for (const g of guesses){
+    const idx = lowerCols.indexOf(g.toLowerCase());
+    if (idx !== -1) return cols[idx];
+  }
+  return cols[0] || '';
+}
+
+function populateSelect(id, cols, selected){
+  const sel = document.getElementById(id);
+  sel.innerHTML = cols.map(c => `<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');
+}
+
+function handleFile(file){
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+      const errorEl = document.getElementById('errorMsg');
+      if (!rows.length){
+        errorEl.style.display = 'block';
+        errorEl.textContent = 'Feed rejected — no rows found in the first sheet.';
+        return;
+      }
+      const cols = Object.keys(rows[0]);
+      const missing = REQUIRED_COLS.filter(c => !cols.includes(c));
+      if (missing.length){
+        errorEl.style.display = 'block';
+        errorEl.textContent = `Feed rejected — missing required field(s): ${missing.join(', ')}`;
+        document.getElementById('mappingPanel').style.display = 'none';
+        document.getElementById('queryPanel').style.display = 'none';
+        return;
+      }
+      errorEl.style.display = 'none';
+      document.getElementById('fileTag').style.display = 'block';
+      document.getElementById('fileTag').textContent = `Loaded: ${file.name} · ${rows.length.toLocaleString()} rows`;
+
+      scoredRows = computeRisk(rows);
+
+      const dateGuess = guessCol(cols, DATE_GUESSES);
+      const latGuess = guessCol(cols, LAT_GUESSES);
+      const lonGuess = guessCol(cols, LON_GUESSES);
+      populateSelect('dateCol', cols, dateGuess);
+      populateSelect('latCol', cols, latGuess);
+      populateSelect('lonCol', cols, lonGuess);
+      mappedCols = { date: dateGuess, lat: latGuess, lon: lonGuess };
+
+      document.getElementById('mappingPanel').style.display = 'block';
+      document.getElementById('queryPanel').style.display = 'block';
+      document.getElementById('results').style.display = 'none';
+    } catch (err) {
+      const errorEl = document.getElementById('errorMsg');
+      errorEl.style.display = 'block';
+      errorEl.textContent = `Feed rejected — could not parse file (${err.message}).`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+dropzone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+['dragover','dragenter'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+dropzone.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+
+['dateCol','latCol','lonCol'].forEach(id => {
+  document.getElementById(id).addEventListener('change', (e) => {
+    const key = id === 'dateCol' ? 'date' : id === 'latCol' ? 'lat' : 'lon';
+    mappedCols[key] = e.target.value;
+  });
+});
+
+const radiusSlider = document.getElementById('radiusSlider');
+radiusSlider.addEventListener('input', () => {
+  document.getElementById('radiusValue').textContent = `${radiusSlider.value} km`;
+});
+
+const presetsEl = document.getElementById('presets');
+presetsEl.innerHTML = PRESETS.map(p => `<span class="preset-chip" data-lat="${p.lat}" data-lon="${p.lon}">${p.name}</span>`).join('');
+presetsEl.querySelectorAll('.preset-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.getElementById('qLat').value = chip.dataset.lat;
+    document.getElementById('qLon').value = chip.dataset.lon;
+  });
+});
+
+function runSearch(){
+  const errorEl = document.getElementById('errorMsg');
+  const qLat = parseFloat(document.getElementById('qLat').value);
+  const qLon = parseFloat(document.getElementById('qLon').value);
+  const radius = parseFloat(radiusSlider.value);
+
+  if (isNaN(qLat) || isNaN(qLon)){
+    errorEl.style.display = 'block';
+    errorEl.textContent = 'Enter a valid latitude and longitude to search.';
+    return;
+  }
+  errorEl.style.display = 'none';
+
+  const matched = [];
+  scoredRows.forEach(r => {
+    const lat = Number(r[mappedCols.lat]);
+    const lon = Number(r[mappedCols.lon]);
+    if (isNaN(lat) || isNaN(lon)) return;
+    const dist = haversine(qLat, qLon, lat, lon);
+    if (dist <= radius){
+      const d = parseDate(r[mappedCols.date]);
+      matched.push({ date: d, dateRaw: r[mappedCols.date], risk: r['Global Risk'], dist, root: r.EventRootCode, quad: r.QuadClass });
+    }
+  });
+  matched.sort((a,b) => (a.date && b.date) ? a.date - b.date : 0);
+  lastMatched = matched;
+
+  document.getElementById('results').style.display = matched.length ? 'block' : 'block';
+
+  if (!matched.length){
+    document.getElementById('statCount').textContent = '0';
+    document.getElementById('statAvg').textContent = '—';
+    document.getElementById('statPeak').textContent = '—';
+    document.getElementById('statPeakDate').textContent = '—';
+    document.getElementById('chartSub').textContent = `No events found within ${radius} km of (${qLat.toFixed(3)}, ${qLon.toFixed(3)}). Try widening the radius.`;
+    if (timeChartInstance) { timeChartInstance.destroy(); timeChartInstance = null; }
+    document.querySelector('#resultTable tbody').innerHTML = '';
+    return;
+  }
+
+  const risks = matched.map(m => m.risk);
+  const avg = risks.reduce((a,b)=>a+b,0) / risks.length;
+  const peakIdx = risks.indexOf(Math.max(...risks));
+  document.getElementById('statCount').textContent = matched.length.toLocaleString();
+  document.getElementById('statAvg').textContent = avg.toFixed(1);
+  document.getElementById('statPeak').textContent = risks[peakIdx].toFixed(1);
+  document.getElementById('statPeakDate').textContent = matched[peakIdx].date ? matched[peakIdx].date.toLocaleDateString() : String(matched[peakIdx].dateRaw);
+  document.getElementById('chartSub').textContent = `${matched.length} events within ${radius} km of (${qLat.toFixed(3)}, ${qLon.toFixed(3)})`;
+
+  const ctx = document.getElementById('timeChart');
+  if (timeChartInstance) timeChartInstance.destroy();
+  const points = matched.filter(m => m.date).map(m => ({ x: m.date, y: m.risk }));
+  timeChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { datasets: [{
+      data: points, borderColor: '#E8A33D', backgroundColor: 'rgba(232,163,61,0.12)',
+      pointRadius: 3, pointBackgroundColor: '#E8A33D', tension: 0.15, fill: true
+    }]},
+    options: {
+      plugins: { legend: { display:false } },
+      scales: {
+        x: { type: 'time', time: { unit: 'month' }, ticks: { color: '#B8AE99', font: { family:'IBM Plex Mono', size: 10 } }, grid: { color: 'rgba(58,50,38,0.5)' } },
+        y: { min:0, max:100, ticks: { color: '#B8AE99', font: { family:'IBM Plex Mono', size: 10 } }, grid: { color: 'rgba(58,50,38,0.5)' } }
+      }
+    }
+  });
+
+  const tbody = document.querySelector('#resultTable tbody');
+  tbody.innerHTML = matched.map(m => {
+    const tier = riskTier(m.risk);
+    return `<tr>
+      <td>${m.date ? m.date.toLocaleDateString() : m.dateRaw}</td>
+      <td><span class="risk-pill" style="background:${tier.color}22;color:${tier.color};">${fmt(m.risk)}</span></td>
+      <td>${m.dist.toFixed(1)}</td>
+      <td>${m.root}</td>
+      <td>${m.quad}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('searchBtn').addEventListener('click', runSearch);
+document.getElementById('exportBtn').addEventListener('click', () => {
+  if (!lastMatched.length) return;
+  const lines = ['Date,GlobalRisk,DistanceKm,EventRootCode,QuadClass'];
+  lastMatched.forEach(m => {
+    lines.push([m.date ? m.date.toISOString().slice(0,10) : m.dateRaw, m.risk.toFixed(2), m.dist.toFixed(2), m.root, m.quad].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'INDRA_location_risk.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
